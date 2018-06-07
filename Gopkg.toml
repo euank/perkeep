@@ -217,7 +217,9 @@ ignored = [
 
 [[constraint]]
   name = "github.com/syndtr/goleveldb"
-  revision = "34011bf325bce385408353a30b101fe5e923eb6e"
+  # temporary until https://github.com/syndtr/goleveldb/pull/221
+  source = "https://github.com/euank/goleveldb"
+  revision = "e86e2815ec015bc88bfe9ffe8c6fee0f5ee4d58b"
 
 [[constraint]]
   name = "github.com/tgulacsi/picago"

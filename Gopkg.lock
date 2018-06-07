@@ -305,7 +305,8 @@
     "leveldb/table",
     "leveldb/util"
   ]
-  revision = "34011bf325bce385408353a30b101fe5e923eb6e"
+  revision = "e86e2815ec015bc88bfe9ffe8c6fee0f5ee4d58b"
+  source = "https://github.com/euank/goleveldb"
 
 [[projects]]
   name = "github.com/tgulacsi/picago"
@@ -349,6 +350,7 @@
     "curve25519",
     "ed25519",
     "ed25519/internal/edwards25519",
+    "internal/chacha20",
     "nacl/secretbox",
     "openpgp",
     "openpgp/armor",
@@ -592,6 +594,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "06274b99a4551acdcba8ff508d8f5395cd07d788cb7f629e9361f2c431b72411"
+  inputs-digest = "ca0f366492c4a4cb3d57bdbbf8b3f4edd7aff0ee8b39473714d15b7c8cbf74a1"
   solver-name = "gps-cdcl"
   solver-version = 1
