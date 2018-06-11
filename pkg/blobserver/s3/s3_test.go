@@ -17,11 +17,8 @@ limitations under the License.
 package s3
 
 import (
-	"bytes"
 	"context"
-	"crypto/md5"
 	"flag"
-	"io"
 	"log"
 	"os"
 	"path"
@@ -30,6 +27,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"perkeep.org/pkg/blob"
 	"perkeep.org/pkg/blobserver"
 	"perkeep.org/pkg/blobserver/storagetest"
@@ -41,7 +40,7 @@ import (
 var (
 	key          = flag.String("s3_key", "", "AWS access Key ID")
 	secret       = flag.String("s3_secret", "", "AWS access secret")
-	bucket       = flag.String("s3_bucket", "", "Bucket name to use for testing. If empty, testing is skipped. If non-empty, it must begin with 'camlistore-' and end in '-test' and have zero items in it.")
+	bucket       = flag.String("s3_bucket", "", "Bucket name to use for testing. If empty, testing is skipped. If non-empty, it must have zero items in it.")
 	flagTestData = flag.String("testdata", "", "Optional directory containing some files to write to the bucket, for additional tests.")
 )
 
@@ -90,12 +89,8 @@ func testStorage(t *testing.T, bucketDir string) {
 	if *bucket == "" || *key == "" || *secret == "" {
 		t.Skip("Skipping test because at least one of -s3_key, -s3_secret, or -s3_bucket flags has not been provided.")
 	}
-	if !strings.HasPrefix(*bucket, "camlistore-") || !strings.HasSuffix(*bucket, "-test") {
-		t.Fatalf("bogus bucket name %q; must begin with 'camlistore-' and end in '-test'", *bucket)
-	}
 
 	bucketWithDir := path.Join(*bucket, bucketDir)
-
 	storagetest.Test(t, func(t *testing.T) (sto blobserver.Storage, cleanup func()) {
 		sto, err := newFromConfig(nil, jsonconfig.Obj{
 			"aws_access_key":        *key,
@@ -109,18 +104,19 @@ func testStorage(t *testing.T, bucketDir string) {
 		if !testing.Short() {
 			log.Printf("Warning: this test does many serial operations. Without the go test -short flag, this test will be very slow.")
 		}
+
 		if bucketWithDir != *bucket {
 			// Adding "a", and "c" objects in the bucket to make sure objects out of the
 			// "directory" are not touched and have no influence.
 			for _, key := range []string{"a", "c"} {
-				var buf bytes.Buffer
-				md5h := md5.New()
-				size, err := io.Copy(io.MultiWriter(&buf, md5h), strings.NewReader(key))
 				if err != nil {
 					t.Fatalf("could not insert object %s in bucket %v: %v", key, sto.(*s3Storage).bucket, err)
 				}
-				if err := sto.(*s3Storage).s3Client.PutObject(ctxbg,
-					key, sto.(*s3Storage).bucket, md5h, size, &buf); err != nil {
+				if _, err := sto.(*s3Storage).client.PutObject(&s3.PutObjectInput{
+					Bucket: &sto.(*s3Storage).bucket,
+					Key:    aws.String(key),
+					Body:   strings.NewReader(key),
+				}); err != nil {
 					t.Fatalf("could not insert object %s in bucket %v: %v", key, sto.(*s3Storage).bucket, err)
 				}
 			}
@@ -142,10 +138,16 @@ func testStorage(t *testing.T, bucketDir string) {
 				if bucketWithDir != *bucket {
 					// checking that "a" and "c" at the root were left untouched.
 					for _, key := range []string{"a", "c"} {
-						if _, _, err := sto.(*s3Storage).s3Client.Get(ctxbg, sto.(*s3Storage).bucket, key); err != nil {
+						if _, err := sto.(*s3Storage).client.GetObject(&s3.GetObjectInput{
+							Bucket: &sto.(*s3Storage).bucket,
+							Key:    aws.String(key),
+						}); err != nil {
 							t.Fatalf("could not find object %s after tests: %v", key, err)
 						}
-						if err := sto.(*s3Storage).s3Client.Delete(ctxbg, sto.(*s3Storage).bucket, key); err != nil {
+						if _, err := sto.(*s3Storage).client.DeleteObject(&s3.DeleteObjectInput{
+							Bucket: &sto.(*s3Storage).bucket,
+							Key:    aws.String(key),
+						}); err != nil {
 							t.Fatalf("could not remove object %s after tests: %v", key, err)
 						}
 					}
@@ -155,21 +157,4 @@ func testStorage(t *testing.T, bucketDir string) {
 		clearBucket(true)()
 		return sto, clearBucket(false)
 	})
-}
-
-func TestNextStr(t *testing.T) {
-	tests := []struct {
-		s, want string
-	}{
-		{"", ""},
-		{"abc", "abd"},
-		{"ab\xff", "ac\x00"},
-		{"a\xff\xff", "b\x00\x00"},
-		{"sha1-da39a3ee5e6b4b0d3255bfef95601890afd80709", "sha1-da39a3ee5e6b4b0d3255bfef95601890afd8070:"},
-	}
-	for _, tt := range tests {
-		if got := nextStr(tt.s); got != tt.want {
-			t.Errorf("nextStr(%q) = %q; want %q", tt.s, got, tt.want)
-		}
-	}
 }
